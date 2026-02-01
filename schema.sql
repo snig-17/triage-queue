@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS analysis (
   feedback_id TEXT NOT NULL,
   status TEXT NOT NULL,              -- e.g. queued | running | done | failed
   priority INTEGER NOT NULL DEFAULT 0,
+  score INTEGER,
+  signals_json TEXT,
   queued_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   started_at TEXT,
   completed_at TEXT,
