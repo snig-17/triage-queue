@@ -84,7 +84,8 @@ body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;bac
 .container{display:grid;grid-template-columns:1.2fr 1fr 380px;height:100vh;gap:1px;background:#e5e7eb}
 .left{flex:1;background:#fff;overflow:auto;display:flex;flex-direction:column}
 .middle{background:#fff;overflow:auto;display:flex;flex-direction:column}
-.right{background:#fff;overflow:auto;display:flex;flex-direction:column}
+.right{background:#fff;overflow:hidden;display:flex;flex-direction:column}
+.right .content{padding:16px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:16px}
 .header{padding:16px 20px;border-bottom:1px solid #e5e7eb;background:#fff;position:sticky;top:0;z-index:10}
 .header h1{font-size:18px;font-weight:600}
 .content{padding:20px;flex:1}
@@ -143,24 +144,24 @@ tr.selected{background:#eff6ff}
 .scoring-info ul{margin:12px 0;padding-left:20px}
 .scoring-info li{font-size:13px;color:#1e40af;margin-bottom:6px}
 .scoring-formula{background:#dbeafe;padding:10px;border-radius:6px;margin:10px 0;font-size:13px;color:#1e3a8a;font-family:ui-monospace,monospace}
-.stats-grid{display:grid;gap:12px;margin-bottom:20px}
-.stat-card{background:#f9fafb;padding:12px;border-radius:6px;border:1px solid #e5e7eb}
-.stat-card-title{font-size:11px;color:#6b7280;text-transform:uppercase;font-weight:600;margin-bottom:8px}
-.stat-card-value{font-size:20px;font-weight:700;color:#111827}
-.stat-bar{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f3f4f6}
+.stats-grid{display:grid;gap:8px;margin-bottom:0}
+.stat-card{background:#f9fafb;padding:10px;border-radius:6px;border:1px solid #e5e7eb}
+.stat-card-title{font-size:10px;color:#6b7280;text-transform:uppercase;font-weight:600;margin-bottom:6px}
+.stat-card-value{font-size:18px;font-weight:700;color:#111827}
+.stat-bar{display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:12px}
 .stat-bar:last-child{border-bottom:none}
-.stat-bar-label{font-size:13px;color:#374151}
-.stat-bar-value{font-size:13px;font-weight:600;color:#111827}
-.chat-container{display:flex;flex-direction:column;height:100%}
-.chat-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;max-height:300px}
-.chat-message{padding:10px 12px;border-radius:8px;font-size:13px;line-height:1.5}
-.chat-message.user{background:#eff6ff;color:#1e40af;align-self:flex-end;max-width:85%;border-radius:12px 12px 4px 12px}
-.chat-message.assistant{background:#f3f4f6;color:#374151;align-self:flex-start;max-width:90%;border-radius:12px 12px 12px 4px}
-.chat-input-container{padding:12px;border-top:1px solid #e5e7eb;background:#fff}
-.chat-input-form{display:flex;gap:8px}
-.chat-input{flex:1;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:inherit}
+.stat-bar-label{font-size:12px;color:#374151}
+.stat-bar-value{font-size:12px;font-weight:600;color:#111827}
+.chat-container{display:flex;flex-direction:column;flex:1;min-height:0;border-top:1px solid #e5e7eb;padding-top:12px}
+.chat-messages{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:8px;background:#fafafa;border-radius:6px;min-height:200px;max-height:400px}
+.chat-message{padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.4}
+.chat-message.user{background:#eff6ff;color:#1e40af;align-self:flex-end;max-width:85%;border-radius:10px 10px 2px 10px}
+.chat-message.assistant{background:#fff;color:#374151;align-self:flex-start;max-width:90%;border-radius:10px 10px 10px 2px;border:1px solid #e5e7eb}
+.chat-input-container{padding:10px 0 0 0;background:transparent}
+.chat-input-form{display:flex;gap:6px}
+.chat-input{flex:1;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;font-family:inherit}
 .chat-input:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,0.1)}
-.chat-loading{text-align:center;padding:12px;color:#6b7280;font-size:13px}
+.chat-loading{text-align:center;padding:10px;color:#6b7280;font-size:12px}
 </style>
 </head>
 <body>
@@ -237,7 +238,6 @@ Score <15 → Priority 1 (Minimal)
 <div class="header"><h1>Detail</h1></div>
 <div class="content" id="detailContent">
 <div class="empty">Select an item from the queue</div>
-</div>
 </div>
 </div>
 <div class="right">
