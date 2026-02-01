@@ -77,7 +77,7 @@ export default {
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>Triage Queue</title>
+<title>Triage Queue v${Date.now()}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;background:#f9fafb;color:#111827;line-height:1.5}
@@ -313,10 +313,10 @@ let html='<div class="detail-section"><h2>Feedback</h2><p>'+escapeHtml(fb.conten
 if(fb.source)html+='<p><span class="source-badge">'+escapeHtml(fb.source)+'</span></p>';
 html+='</div>';
 if(analysis&&analysis.status==='running'){
-html+='<div class="detail-section"><div style="padding:20px;background:#eff6ff;border-radius:8px;text-align:center"><div style="font-size:16px;font-weight:600;color:#1e40af;margin-bottom:8px">🔄 Analyzing...</div><div style="font-size:13px;color:#3730a3">Workflow is processing this feedback. Results will appear shortly.</div></div></div>';
+html+='<div class="detail-section"><div style="padding:20px;background:#eff6ff;border-radius:8px;text-align:center"><div style="font-size:16px;font-weight:600;color:#1e40af;margin-bottom:8px">Analyzing...</div><div style="font-size:13px;color:#3730a3">Workflow is processing this feedback. Results will appear shortly.</div></div></div>';
 }
 if(analysis&&analysis.status==='failed'){
-html+='<div class="detail-section"><div style="padding:16px;background:#fee2e2;border-radius:8px"><div style="font-size:14px;font-weight:600;color:#991b1b;margin-bottom:8px">⚠️ Analysis Failed</div>';
+html+='<div class="detail-section"><div style="padding:16px;background:#fee2e2;border-radius:8px"><div style="font-size:14px;font-weight:600;color:#991b1b;margin-bottom:8px">Analysis Failed</div>';
 if(analysis.error_text)html+='<div style="font-size:13px;color:#991b1b;margin-bottom:12px">'+escapeHtml(analysis.error_text)+'</div>';
 html+='<button class="btn" onclick="retryAnalysis(\''+fb.id+'\')">Retry Analysis</button></div></div>';
 }
