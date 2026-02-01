@@ -69,11 +69,14 @@ export default {
 
 		if (url.pathname === '/app') {
 			if (method !== 'GET') return methodNotAllowed();
-			const html = `<!doctype html>
+			const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Triage Queue</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -272,7 +275,14 @@ if(item.status==='running'){
 statusBadge='<span class="status-badge '+statusClass+'">analyzing...</span>';
 }
 const score=item.score||'-';
-return '<tr data-id="'+escapeHtml(item.feedback_id)+'" class="queue-row '+selected+'"><td><span class="priority-chip '+priorityClass+'">'+priorityLabel+'</span></td><td>'+contentPreview+'</td><td>'+sourceBadge+'</td><td>'+statusBadge+'</td><td class="score">'+score+'</td></tr>';
+const rowHtml = '<tr data-id="'+escapeHtml(item.feedback_id)+'" class="queue-row '+selected+'">'+
+'<td><span class="priority-chip '+priorityClass+'">'+priorityLabel+'</span></td>'+
+'<td>'+contentPreview+'</td>'+
+'<td>'+sourceBadge+'</td>'+
+'<td>'+statusBadge+'</td>'+
+'<td class="score">'+score+'</td>'+
+'</tr>';
+return rowHtml;
 });
 tbody.innerHTML=rows.join('');
 document.querySelectorAll('.queue-row').forEach(row=>{
@@ -280,6 +290,7 @@ row.onclick=()=>selectItem(row.getAttribute('data-id'));
 });
 }catch(e){
 console.error('Queue load error:',e);
+console.error('Error details:',e.stack);
 tbody.innerHTML='<tr><td colspan="5" class="error">Failed to load queue: '+e.message+'</td></tr>';
 }
 }
@@ -430,7 +441,7 @@ setInterval(loadQueue,10000);
 				const source = url.searchParams.get('source');
 				const statuses = url.searchParams.getAll('status');
 				const sort = url.searchParams.get('sort');
-				const filters: { limit: number; priority?: number; source?: string; status?: string; statuses?: string[]; sort?: string } = { limit: 100 };
+				const filters: { limit: number; priority?: number; source?: string; status?: string; statuses?: string[]; sort?: string } = { limit: 20 };
 				if (priority) filters.priority = parseInt(priority);
 				if (source) filters.source = source;
 				if (statuses.length > 0) filters.statuses = statuses;
