@@ -98,7 +98,7 @@ export async function upsertAnalysis(
 			params.priority ?? 0,
 			params.score ?? null,
 			params.signals_json ?? null,
-			params.queued_at ?? null,
+			params.queued_at ?? new Date().toISOString(),
 			params.started_at ?? null,
 			params.completed_at ?? null,
 			params.result_json ?? null,
@@ -143,12 +143,7 @@ export async function listQueue(db: D1Database, filters: QueueFilters = {}): Pro
 
 	bindings.push(limit, offset);
 
-	const stmt = db.prepare(sql);
-	for (let i = 0; i < bindings.length; i++) {
-		stmt.bind(bindings[i]);
-	}
-
-	const result = await stmt.all<Analysis>();
+	const result = await db.prepare(sql).bind(...bindings).all<Analysis>();
 	return result.results ?? [];
 }
 
