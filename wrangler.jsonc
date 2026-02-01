@@ -17,7 +17,7 @@
 		{
 			"binding": "DB",
 			"database_name": "triage-queue-db",
-			"database_id": "preview"
+			"database_id": "5c44e96b-febe-4b17-9c98-0faed483c32c"
 		}
 	],
 	"workflows": [
