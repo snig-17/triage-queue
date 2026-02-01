@@ -60,6 +60,10 @@ export default {
 			}
 		};
 
+		if (url.pathname === '/' || url.pathname === '') {
+			return Response.redirect(new URL('/app', url.origin).toString(), 302);
+		}
+
 		if (url.pathname === '/app') {
 			if (method !== 'GET') return methodNotAllowed();
 			return new Response(
