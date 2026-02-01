@@ -255,7 +255,7 @@ const url='/queue'+(queryString?'?'+queryString:'');
 const res=await fetch(url);
 const data=await res.json();
 if(!data.ok||!data.items||data.items.length===0){
-tbody.innerHTML='<tr><td colspan="4" class="empty">No items in queue</td></tr>';
+tbody.innerHTML='<tr><td colspan="5" class="empty">No items in queue</td></tr>';
 return;
 }
 const rows=data.items.map(item=>{
