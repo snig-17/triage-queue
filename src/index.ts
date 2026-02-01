@@ -66,8 +66,7 @@ export default {
 
 		if (url.pathname === '/app') {
 			if (method !== 'GET') return methodNotAllowed();
-			return new Response(
-				`<!doctype html>
+			const html = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -141,19 +140,103 @@ tr.selected{background:#eff6ff}
 </div>
 <script>
 let selectedId=null;
-async function loadQueue(){const tbody=document.getElementById('queueBody');try{const res=await fetch('/queue');const data=await res.json();if(!data.ok||!data.items||data.items.length===0){tbody.innerHTML='<tr><td colspan="4" class="empty">No items in queue</td></tr>';return}tbody.innerHTML=data.items.map(item=>{const priorityClass='priority-'+(item.priority||1);const priorityLabel=['','minimal','low','medium','high','critical'][item.priority||1]||'unknown';return \`<tr onclick="selectItem('\${item.feedback_id}')" class="\${selectedId===item.feedback_id?'selected':''}"><td><span class="priority-chip \${priorityClass}">\${priorityLabel}</span></td><td>\${escapeHtml((item.content||'').substring(0,60))}\${(item.content||'').length>60?'...':''}</td><td>\${item.source?'<span class="source-badge">'+escapeHtml(item.source)+'</span>':'-'}</td><td class="score">\${item.score||'-'}</td></tr>\`}).join('')}catch(e){console.error('Queue load error:',e);tbody.innerHTML='<tr><td colspan="4" class="error">Failed to load queue: '+e.message+'</td></tr>'}}
-async function selectItem(id){selectedId=id;loadQueue();const detail=document.getElementById('detailContent');detail.innerHTML='<div class="loading">Loading...</div>';try{const res=await fetch('/item/'+encodeURIComponent(id));const data=await res.json();if(!data.ok||!data.feedback){detail.innerHTML='<div class="error">Item not found</div>';return}const fb=data.feedback;const analysis=data.analysis&&data.analysis.length>0?data.analysis[0]:null;const overrides=data.overrides||[];let html='<div class="detail-section"><h2>Feedback</h2><p>'+escapeHtml(fb.content)+'</p>';if(fb.source)html+='<p><span class="source-badge">'+escapeHtml(fb.source)+'</span></p>';html+='</div>';if(analysis&&analysis.signals_json){const signals=JSON.parse(analysis.signals_json);html+='<div class="detail-section"><h2>Analysis</h2><p>'+escapeHtml(signals.explanation||'')+'</p></div>';html+='<div class="detail-section"><h2>Factor Breakdown</h2><div class="breakdown">';html+='<div class="breakdown-item"><label>Sentiment</label><div class="value">'+escapeHtml(signals.sentiment||'-')+'</div></div>';html+='<div class="breakdown-item"><label>Severity</label><div class="value">'+signals.severity_signal+'/5</div></div>';html+='<div class="breakdown-item"><label>Business Risk</label><div class="value">'+signals.business_risk_signal+'/5</div></div>';html+='<div class="breakdown-item"><label>Confidence</label><div class="value">'+(signals.confidence*100).toFixed(0)+'%</div></div>';html+='</div></div>';if(signals.keywords&&signals.keywords.length>0){html+='<div class="detail-section"><h2>Keywords</h2><div class="keywords">'+signals.keywords.map(k=>'<span class="keyword">'+escapeHtml(k)+'</span>').join('')+'</div></div>'}}
-if(analysis){html+='<div class="detail-section"><h2>Override Priority</h2><form id="overrideForm" onsubmit="submitOverride(event,\''+analysis.id+'\')"><div class="form-group"><label>New Priority (1-5)</label><input type="number" id="newPriority" min="1" max="5" required></div><div class="form-group"><label>Reason</label><textarea id="overrideReason" rows="2" required></textarea></div><button type="submit" class="btn">Submit Override</button></form></div>'}
-if(overrides.length>0){html+='<div class="detail-section"><h2>Override History</h2><div class="override-list">'+overrides.map(o=>'<div class="override-item"><div class="meta">'+(o.created_at||'')+(o.actor?' by '+escapeHtml(o.actor):'')+'</div><div class="action">'+escapeHtml(o.action||'')+'</div>'+(o.payload_json?'<div>'+escapeHtml(o.payload_json)+'</div>':'')+'</div>').join('')+'</div></div>'}
-detail.innerHTML=html}catch(e){detail.innerHTML='<div class="error">Failed to load item details</div>'}}
-async function submitOverride(e,analysisId){e.preventDefault();const priority=parseInt(document.getElementById('newPriority').value);const reason=document.getElementById('overrideReason').value;const btn=e.target.querySelector('button');btn.disabled=true;btn.textContent='Submitting...';try{const overrideId='override-'+Date.now();const res=await fetch('/override/'+encodeURIComponent(analysisId),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:overrideId,priority,reason})});if(res.ok){await loadQueue();await selectItem(selectedId)}else{alert('Failed to submit override')}}catch(e){alert('Error: '+e.message)}finally{btn.disabled=false;btn.textContent='Submit Override'}}
 function escapeHtml(str){const div=document.createElement('div');div.textContent=str;return div.innerHTML}
-loadQueue();setInterval(loadQueue,10000);
+async function loadQueue(){
+const tbody=document.getElementById('queueBody');
+try{
+const res=await fetch('/queue');
+const data=await res.json();
+if(!data.ok||!data.items||data.items.length===0){
+tbody.innerHTML='<tr><td colspan="4" class="empty">No items in queue</td></tr>';
+return;
+}
+const rows=data.items.map(item=>{
+const priorityClass='priority-'+(item.priority||1);
+const priorityLabel=['','minimal','low','medium','high','critical'][item.priority||1]||'unknown';
+const selected=selectedId===item.feedback_id?'selected':'';
+const content=(item.content||'').substring(0,60);
+const contentPreview=escapeHtml(content)+(item.content&&item.content.length>60?'...':'');
+const sourceBadge=item.source?'<span class="source-badge">'+escapeHtml(item.source)+'</span>':'-';
+const score=item.score||'-';
+return '<tr onclick="selectItem('+JSON.stringify(item.feedback_id)+')" class="'+selected+'"><td><span class="priority-chip '+priorityClass+'">'+priorityLabel+'</span></td><td>'+contentPreview+'</td><td>'+sourceBadge+'</td><td class="score">'+score+'</td></tr>';
+});
+tbody.innerHTML=rows.join('');
+}catch(e){
+console.error('Queue load error:',e);
+tbody.innerHTML='<tr><td colspan="4" class="error">Failed to load queue: '+e.message+'</td></tr>';
+}
+}
+async function selectItem(id){
+selectedId=id;
+loadQueue();
+const detail=document.getElementById('detailContent');
+detail.innerHTML='<div class="loading">Loading...</div>';
+try{
+const res=await fetch('/item/'+encodeURIComponent(id));
+const data=await res.json();
+if(!data.ok||!data.feedback){
+detail.innerHTML='<div class="error">Item not found</div>';
+return;
+}
+const fb=data.feedback;
+const analysis=data.analysis&&data.analysis.length>0?data.analysis[0]:null;
+const overrides=data.overrides||[];
+let html='<div class="detail-section"><h2>Feedback</h2><p>'+escapeHtml(fb.content)+'</p>';
+if(fb.source)html+='<p><span class="source-badge">'+escapeHtml(fb.source)+'</span></p>';
+html+='</div>';
+if(analysis&&analysis.signals_json){
+const signals=JSON.parse(analysis.signals_json);
+html+='<div class="detail-section"><h2>Analysis</h2><p>'+escapeHtml(signals.explanation||'')+'</p></div>';
+html+='<div class="detail-section"><h2>Factor Breakdown</h2><div class="breakdown">';
+html+='<div class="breakdown-item"><label>Sentiment</label><div class="value">'+escapeHtml(signals.sentiment||'-')+'</div></div>';
+html+='<div class="breakdown-item"><label>Severity</label><div class="value">'+signals.severity_signal+'/5</div></div>';
+html+='<div class="breakdown-item"><label>Business Risk</label><div class="value">'+signals.business_risk_signal+'/5</div></div>';
+html+='<div class="breakdown-item"><label>Confidence</label><div class="value">'+(signals.confidence*100).toFixed(0)+'%</div></div>';
+html+='</div></div>';
+if(signals.keywords&&signals.keywords.length>0){
+html+='<div class="detail-section"><h2>Keywords</h2><div class="keywords">'+signals.keywords.map(k=>'<span class="keyword">'+escapeHtml(k)+'</span>').join('')+'</div></div>';
+}
+}
+if(analysis){
+html+='<div class="detail-section"><h2>Override Priority</h2><form id="overrideForm" onsubmit="submitOverride(event,'+JSON.stringify(analysis.id)+')"><div class="form-group"><label>New Priority (1-5)</label><input type="number" id="newPriority" min="1" max="5" required></div><div class="form-group"><label>Reason</label><textarea id="overrideReason" rows="2" required></textarea></div><button type="submit" class="btn">Submit Override</button></form></div>';
+}
+if(overrides.length>0){
+html+='<div class="detail-section"><h2>Override History</h2><div class="override-list">'+overrides.map(o=>'<div class="override-item"><div class="meta">'+(o.created_at||'')+(o.actor?' by '+escapeHtml(o.actor):'')+'</div><div class="action">'+escapeHtml(o.action||'')+'</div>'+(o.payload_json?'<div>'+escapeHtml(o.payload_json)+'</div>':'')+'</div>').join('')+'</div></div>';
+}
+detail.innerHTML=html;
+}catch(e){
+detail.innerHTML='<div class="error">Failed to load item details</div>';
+}
+}
+async function submitOverride(e,analysisId){
+e.preventDefault();
+const priority=parseInt(document.getElementById('newPriority').value);
+const reason=document.getElementById('overrideReason').value;
+const btn=e.target.querySelector('button');
+btn.disabled=true;
+btn.textContent='Submitting...';
+try{
+const overrideId='override-'+Date.now();
+const res=await fetch('/override/'+encodeURIComponent(analysisId),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:overrideId,priority,reason})});
+if(res.ok){
+await loadQueue();
+await selectItem(selectedId);
+}else{
+alert('Failed to submit override');
+}
+}catch(e){
+alert('Error: '+e.message);
+}finally{
+btn.disabled=false;
+btn.textContent='Submit Override';
+}
+}
+loadQueue();
+setInterval(loadQueue,10000);
 </script>
 </body>
-</html>`,
-				{ headers: { 'content-type': 'text/html; charset=utf-8' } },
-			);
+</html>`;
+			return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 		}
 
 		if (url.pathname === '/queue') {
