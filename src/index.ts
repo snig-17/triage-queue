@@ -11,6 +11,11 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
+import type { ExportedHandler } from '@cloudflare/workers-types';
+
+// Export Workflow class for Cloudflare Workers runtime
+export { AnalyzeFeedbackWorkflow } from './workflow';
+
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
 		const url = new URL(request.url);
@@ -98,6 +103,9 @@ tr.selected{background:#eff6ff}
 .status-pending{background:#fef3c7;color:#92400e}
 .status-assigned{background:#dbeafe;color:#1e40af}
 .status-done{background:#d1fae5;color:#065f46}
+.status-running{background:#e0e7ff;color:#3730a3;animation:pulse 2s ease-in-out infinite}
+.status-failed{background:#fee2e2;color:#991b1b}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}
 .score{font-weight:600;color:#059669}
 .empty{text-align:center;padding:40px;color:#9ca3af}
 .detail-section{margin-bottom:24px}
@@ -261,7 +269,10 @@ const content=(item.content||'').substring(0,60);
 const contentPreview=escapeHtml(content)+(item.content&&item.content.length>60?'...':'');
 const sourceBadge=item.source?'<span class="source-badge">'+escapeHtml(item.source)+'</span>':'-';
 const statusClass='status-'+item.status;
-const statusBadge='<span class="status-badge '+statusClass+'">'+item.status+'</span>';
+let statusBadge='<span class="status-badge '+statusClass+'">'+item.status+'</span>';
+if(item.status==='running'){
+statusBadge='<span class="status-badge '+statusClass+'">analyzing...</span>';
+}
 const score=item.score||'-';
 return '<tr data-id="'+escapeHtml(item.feedback_id)+'" class="queue-row '+selected+'"><td><span class="priority-chip '+priorityClass+'">'+priorityLabel+'</span></td><td>'+contentPreview+'</td><td>'+sourceBadge+'</td><td>'+statusBadge+'</td><td class="score">'+score+'</td></tr>';
 });
@@ -292,6 +303,14 @@ const overrides=data.overrides||[];
 let html='<div class="detail-section"><h2>Feedback</h2><p>'+escapeHtml(fb.content)+'</p>';
 if(fb.source)html+='<p><span class="source-badge">'+escapeHtml(fb.source)+'</span></p>';
 html+='</div>';
+if(analysis&&analysis.status==='running'){
+html+='<div class="detail-section"><div style="padding:20px;background:#eff6ff;border-radius:8px;text-align:center"><div style="font-size:16px;font-weight:600;color:#1e40af;margin-bottom:8px">🔄 Analyzing...</div><div style="font-size:13px;color:#3730a3">Workflow is processing this feedback. Results will appear shortly.</div></div></div>';
+}
+if(analysis&&analysis.status==='failed'){
+html+='<div class="detail-section"><div style="padding:16px;background:#fee2e2;border-radius:8px"><div style="font-size:14px;font-weight:600;color:#991b1b;margin-bottom:8px">⚠️ Analysis Failed</div>';
+if(analysis.error_text)html+='<div style="font-size:13px;color:#991b1b;margin-bottom:12px">'+escapeHtml(analysis.error_text)+'</div>';
+html+='<button class="btn" onclick="retryAnalysis(\''+fb.id+'\')">Retry Analysis</button></div></div>';
+}
 if(analysis&&analysis.signals_json){
 const signals=JSON.parse(analysis.signals_json);
 html+='<div class="detail-section"><h2>Analysis</h2><p>'+escapeHtml(signals.explanation||'')+'</p></div>';
@@ -330,8 +349,25 @@ const analysisId=form.getAttribute('data-analysis-id');
 submitOverride(analysisId);
 };
 }
+if(analysis&&analysis.status==='running'){
+setTimeout(()=>selectItem(id),3000);
+}
 }catch(e){
 detail.innerHTML='<div class="error">Failed to load item details</div>';
+}
+}
+async function retryAnalysis(feedbackId){
+try{
+const res=await fetch('/analyze/'+encodeURIComponent(feedbackId),{method:'POST'});
+if(res.ok){
+await loadQueue();
+await selectItem(feedbackId);
+alert('Analysis restarted successfully');
+}else{
+alert('Failed to retry analysis');
+}
+}catch(e){
+alert('Error: '+e.message);
 }
 }
 async function updateStatus(analysisId,newStatus){
@@ -539,8 +575,62 @@ setInterval(loadQueue,10000);
 
 		if (url.pathname === '/ingest') {
 			if (method !== 'POST') return methodNotAllowed();
-			const payload = await readJson<Record<string, unknown>>();
-			return json({ ok: true, received: payload });
+			try {
+				if (!env.DB || !env.ANALYZE_WORKFLOW) {
+					return json({ ok: false, error: 'Database or Workflow not configured' }, { status: 500 });
+				}
+
+				const payload = await readJson<{ source?: string; content?: string; metadata?: Record<string, unknown> }>();
+				if (!payload || !payload.content) {
+					return json({ ok: false, error: 'Invalid payload: content required' }, { status: 400 });
+				}
+
+				const { insertFeedback, upsertAnalysis } = await import('./db');
+
+				// Insert feedback into D1
+				const feedbackId = `feedback-${Date.now()}`;
+				await insertFeedback(env.DB, {
+					id: feedbackId,
+					source: payload.source || 'api',
+					content: payload.content,
+					metadata_json: payload.metadata ? JSON.stringify(payload.metadata) : null,
+				});
+
+				// Create analysis record with 'running' status
+				const analysisId = `analysis-${feedbackId}-${Date.now()}`;
+				await upsertAnalysis(env.DB, {
+					id: analysisId,
+					feedback_id: feedbackId,
+					status: 'running', // Workflow is processing
+					priority: 0,
+				});
+
+				// Trigger workflow for async analysis
+				const instance = await env.ANALYZE_WORKFLOW.create({
+					id: analysisId,
+					params: {
+						feedbackId,
+						analysisId,
+					},
+				});
+
+				return json({
+					ok: true,
+					feedback_id: feedbackId,
+					analysis_id: analysisId,
+					workflow_id: instance.id,
+					message: 'Feedback ingested, analysis workflow started',
+				});
+			} catch (error) {
+				return json(
+					{
+						ok: false,
+						error: 'Failed to ingest feedback',
+						details: error instanceof Error ? error.message : String(error),
+					},
+					{ status: 500 },
+				);
+			}
 		}
 
 		{
