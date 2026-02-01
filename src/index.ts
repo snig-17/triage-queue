@@ -81,9 +81,10 @@ export default {
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;background:#f9fafb;color:#111827;line-height:1.5}
-.container{display:flex;height:100vh;gap:1px;background:#e5e7eb}
+.container{display:grid;grid-template-columns:1.2fr 1fr 380px;height:100vh;gap:1px;background:#e5e7eb}
 .left{flex:1;background:#fff;overflow:auto;display:flex;flex-direction:column}
-.right{flex:1;background:#fff;overflow:auto;display:flex;flex-direction:column}
+.middle{background:#fff;overflow:auto;display:flex;flex-direction:column}
+.right{background:#fff;overflow:auto;display:flex;flex-direction:column}
 .header{padding:16px 20px;border-bottom:1px solid #e5e7eb;background:#fff;position:sticky;top:0;z-index:10}
 .header h1{font-size:18px;font-weight:600}
 .content{padding:20px;flex:1}
@@ -142,6 +143,24 @@ tr.selected{background:#eff6ff}
 .scoring-info ul{margin:12px 0;padding-left:20px}
 .scoring-info li{font-size:13px;color:#1e40af;margin-bottom:6px}
 .scoring-formula{background:#dbeafe;padding:10px;border-radius:6px;margin:10px 0;font-size:13px;color:#1e3a8a;font-family:ui-monospace,monospace}
+.stats-grid{display:grid;gap:12px;margin-bottom:20px}
+.stat-card{background:#f9fafb;padding:12px;border-radius:6px;border:1px solid #e5e7eb}
+.stat-card-title{font-size:11px;color:#6b7280;text-transform:uppercase;font-weight:600;margin-bottom:8px}
+.stat-card-value{font-size:20px;font-weight:700;color:#111827}
+.stat-bar{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f3f4f6}
+.stat-bar:last-child{border-bottom:none}
+.stat-bar-label{font-size:13px;color:#374151}
+.stat-bar-value{font-size:13px;font-weight:600;color:#111827}
+.chat-container{display:flex;flex-direction:column;height:100%}
+.chat-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;max-height:300px}
+.chat-message{padding:10px 12px;border-radius:8px;font-size:13px;line-height:1.5}
+.chat-message.user{background:#eff6ff;color:#1e40af;align-self:flex-end;max-width:85%;border-radius:12px 12px 4px 12px}
+.chat-message.assistant{background:#f3f4f6;color:#374151;align-self:flex-start;max-width:90%;border-radius:12px 12px 12px 4px}
+.chat-input-container{padding:12px;border-top:1px solid #e5e7eb;background:#fff}
+.chat-input-form{display:flex;gap:8px}
+.chat-input{flex:1;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:inherit}
+.chat-input:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,0.1)}
+.chat-loading{text-align:center;padding:12px;color:#6b7280;font-size:13px}
 </style>
 </head>
 <body>
@@ -214,10 +233,31 @@ Score <15 → Priority 1 (Minimal)
 </table>
 </div>
 </div>
-<div class="right">
+<div class="middle">
 <div class="header"><h1>Detail</h1></div>
 <div class="content" id="detailContent">
 <div class="empty">Select an item from the queue</div>
+</div>
+</div>
+</div>
+<div class="right">
+<div class="header"><h1>📊 Stats & AI</h1></div>
+<div class="content">
+<div class="stats-grid" id="statsGrid">
+<div class="stat-card"><div class="stat-card-title">Loading...</div></div>
+</div>
+<div class="detail-section" style="margin-top:20px">
+<h2>🤖 AI Assistant</h2>
+<div class="chat-messages" id="chatMessages">
+<div class="chat-message assistant">Ask me about the queue!</div>
+</div>
+<div class="chat-input-container">
+<form class="chat-input-form" onsubmit="sendChatMessage(event)">
+<input type="text" id="chatInput" class="chat-input" placeholder="What should I focus on?" required>
+<button type="submit" class="btn">Send</button>
+</form>
+</div>
+</div>
 </div>
 </div>
 </div>
@@ -230,6 +270,64 @@ info.style.display=info.style.display==='none'?'block':'none';
 }
 function applyFilters(){
 loadQueue();
+}
+async function loadStats(){
+	try{
+		const res=await fetch('/stats');
+		const data=await res.json();
+		if(!data.ok)return;
+		const stats=data.stats;
+		const grid=document.getElementById('statsGrid');
+		let html='';
+		html+='<div class="stat-card"><div class="stat-card-title">Recent (24h)</div><div class="stat-card-value">'+stats.recent_24h+'</div></div>';
+		html+='<div class="stat-card"><div class="stat-card-title">By Priority</div>';
+		stats.priority.sort((a,b)=>b.priority-a.priority).forEach(p=>{
+			const labels={1:'Minimal',2:'Low',3:'Medium',4:'High',5:'Critical'};
+			html+='<div class="stat-bar"><span class="stat-bar-label">'+labels[p.priority]+'</span><span class="stat-bar-value">'+p.count+'</span></div>';
+		});
+		html+='</div>';
+		html+='<div class="stat-card"><div class="stat-card-title">By Status</div>';
+		stats.status.forEach(s=>{
+			html+='<div class="stat-bar"><span class="stat-bar-label">'+s.status+'</span><span class="stat-bar-value">'+s.count+'</span></div>';
+		});
+		html+='</div>';
+		html+='<div class="stat-card"><div class="stat-card-title">Sentiment</div>';
+		stats.sentiment.forEach(s=>{
+			html+='<div class="stat-bar"><span class="stat-bar-label">'+s.sentiment+'</span><span class="stat-bar-value">'+s.count+'</span></div>';
+		});
+		html+='</div>';
+		grid.innerHTML=html;
+	}catch(e){
+		console.error('Failed to load stats:',e);
+	}
+}
+async function sendChatMessage(e){
+	e.preventDefault();
+	const input=document.getElementById('chatInput');
+	const messages=document.getElementById('chatMessages');
+	const userMessage=input.value.trim();
+	if(!userMessage)return;
+	messages.innerHTML+='<div class="chat-message user">'+escapeHtml(userMessage)+'</div>';
+	input.value='';
+	messages.scrollTop=messages.scrollHeight;
+	messages.innerHTML+='<div class="chat-loading">🤖 Thinking...</div>';
+	try{
+		const res=await fetch('/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:userMessage})});
+		const data=await res.json();
+		const loading=messages.querySelector('.chat-loading');
+		if(loading)loading.remove();
+		if(data.ok){
+			messages.innerHTML+='<div class="chat-message assistant">'+escapeHtml(data.message)+'</div>';
+		}else{
+			messages.innerHTML+='<div class="chat-message assistant">Sorry, I encountered an error. Please try again.</div>';
+		}
+		messages.scrollTop=messages.scrollHeight;
+	}catch(e){
+		const loading=messages.querySelector('.chat-loading');
+		if(loading)loading.remove();
+		messages.innerHTML+='<div class="chat-message assistant">Error: '+escapeHtml(e.message)+'</div>';
+		messages.scrollTop=messages.scrollHeight;
+	}
 }
 function clearFilters(){
 document.getElementById('priorityFilter').value='';
@@ -427,7 +525,9 @@ btn.textContent='Submit Override';
 }
 }
 loadQueue();
+loadStats();
 setInterval(loadQueue,10000);
+setInterval(loadStats,30000);
 </script>
 </body>
 </html>`;
@@ -817,6 +917,183 @@ setInterval(loadQueue,10000);
 						{ status: 500 },
 					);
 				}
+			}
+		}
+
+		// Get statistics about the queue
+		if (url.pathname === '/stats') {
+			if (method !== 'GET') return methodNotAllowed();
+			try {
+				if (!env.DB) {
+					return json({ ok: false, error: 'Database not configured' }, { status: 500 });
+				}
+
+				// Get sentiment breakdown
+				const sentimentStats = await env.DB
+					.prepare(`
+						SELECT 
+							JSON_EXTRACT(signals_json, '$.sentiment') as sentiment,
+							COUNT(*) as count
+						FROM analysis
+						WHERE signals_json IS NOT NULL
+						GROUP BY sentiment
+					`)
+					.all<{ sentiment: string; count: number }>();
+
+				// Get priority breakdown
+				const priorityStats = await env.DB
+					.prepare(`
+						SELECT 
+							priority,
+							COUNT(*) as count
+						FROM analysis
+						WHERE priority IS NOT NULL
+						GROUP BY priority
+					`)
+					.all<{ priority: number; count: number }>();
+
+				// Get status breakdown
+				const statusStats = await env.DB
+					.prepare(`
+						SELECT 
+							status,
+							COUNT(*) as count
+						FROM analysis
+						WHERE status IS NOT NULL
+						GROUP BY status
+					`)
+					.all<{ status: string; count: number }>();
+
+				// Get recent stats (last 24 hours)
+				const recentStats = await env.DB
+					.prepare(`
+						SELECT COUNT(*) as count
+						FROM analysis
+						WHERE queued_at >= datetime('now', '-24 hours')
+					`)
+					.first<{ count: number }>();
+
+				return json({
+					ok: true,
+					stats: {
+						sentiment: sentimentStats.results,
+						priority: priorityStats.results,
+						status: statusStats.results,
+						recent_24h: recentStats?.count || 0,
+					},
+				});
+			} catch (error) {
+				return json(
+					{ ok: false, error: 'Failed to get stats', details: error instanceof Error ? error.message : String(error) },
+					{ status: 500 },
+				);
+			}
+		}
+
+		// Chat endpoint for AI-powered assistance
+		if (url.pathname === '/chat') {
+			if (method !== 'POST') return methodNotAllowed();
+			try {
+				if (!env.DB || !env.AI) {
+					return json({ ok: false, error: 'Database or AI not configured' }, { status: 500 });
+				}
+
+				const payload = await readJson<{ message?: string }>();
+				if (!payload || !payload.message) {
+					return json({ ok: false, error: 'Invalid payload: message required' }, { status: 400 });
+				}
+
+				const userMessage = payload.message;
+
+				// Get queue context
+				const { listQueue } = await import('./db');
+				const allItems = await listQueue(env.DB, { limit: 100 });
+
+				// Enrich with feedback content
+				const enrichedItems = await Promise.all(
+					allItems.map(async (item) => {
+						const feedbackResult = await env.DB
+							.prepare('SELECT content, source, created_at FROM feedback WHERE id = ?1')
+							.bind(item.feedback_id)
+							.first<{ content: string; source: string | null; created_at: string }>();
+
+						let signals = null;
+						if (item.signals_json) {
+							try {
+								signals = JSON.parse(item.signals_json);
+							} catch {
+								// ignore parse errors
+							}
+						}
+
+						return {
+							priority: item.priority,
+							status: item.status,
+							score: item.score,
+							source: feedbackResult?.source,
+							content: feedbackResult?.content,
+							created_at: feedbackResult?.created_at,
+							sentiment: signals?.sentiment,
+							keywords: signals?.keywords,
+						};
+					}),
+				);
+
+				// Create context for AI
+				const queueSummary = {
+					total_items: enrichedItems.length,
+					by_priority: enrichedItems.reduce((acc, item) => {
+						const p = item.priority || 0;
+						acc[p] = (acc[p] || 0) + 1;
+						return acc;
+					}, {} as Record<number, number>),
+					by_status: enrichedItems.reduce((acc, item) => {
+						const s = item.status || 'unknown';
+						acc[s] = (acc[s] || 0) + 1;
+						return acc;
+					}, {} as Record<string, number>),
+					by_sentiment: enrichedItems.reduce((acc, item) => {
+						const s = item.sentiment || 'unknown';
+						acc[s] = (acc[s] || 0) + 1;
+						return acc;
+					}, {} as Record<string, number>),
+					recent_items: enrichedItems.slice(0, 5).map((item) => ({
+						priority: item.priority,
+						status: item.status,
+						score: item.score,
+						source: item.source,
+						content: item.content?.substring(0, 100),
+						created_at: item.created_at,
+					})),
+				};
+
+				const systemPrompt = `You are a helpful assistant for a triage queue system. You help users understand their feedback queue and prioritize work.
+
+Current queue summary:
+${JSON.stringify(queueSummary, null, 2)}
+
+Priority levels: 1=minimal, 2=low, 3=medium, 4=high, 5=critical
+Status values: pending, assigned, running, done, failed
+
+Answer the user's question concisely and helpfully based on the queue data. If they ask about "new" tasks, refer to items with status "pending". If they ask what to solve first, recommend high-priority items (4-5) that are pending.`;
+
+				const response: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct' as any, {
+					messages: [
+						{ role: 'system', content: systemPrompt },
+						{ role: 'user', content: userMessage },
+					],
+				});
+
+				return json({
+					ok: true,
+					message: (response?.response as string) || 'No response from AI',
+					queue_summary: queueSummary,
+				});
+			} catch (error) {
+				return json(
+					{ ok: false, error: 'Failed to process chat', details: error instanceof Error ? error.message : String(error) },
+					{ status: 500 },
+				);
 			}
 		}
 
