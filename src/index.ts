@@ -257,10 +257,14 @@ const queryString=params.toString();
 const url='/queue'+(queryString?'?'+queryString:'');
 const res=await fetch(url);
 const data=await res.json();
-if(!data.ok||!data.items||data.items.length===0){
-tbody.innerHTML='<tr><td colspan="5" class="empty">No items in queue</td></tr>';
-return;
-}
+				if(!data.ok){
+					tbody.innerHTML='<tr><td colspan="5" class="error">Error: '+(data.error||'Unknown error')+'</td></tr>';
+					return;
+				}
+				if(!data.items||data.items.length===0){
+					tbody.innerHTML='<tr><td colspan="5" class="empty">No items in queue</td></tr>';
+					return;
+				}
 const rows=data.items.map(item=>{
 const priorityClass='priority-'+(item.priority||1);
 const labels={1:'minimal',2:'low',3:'medium',4:'high',5:'critical'};
@@ -318,7 +322,7 @@ html+='<div class="detail-section"><div style="padding:20px;background:#eff6ff;b
 if(analysis&&analysis.status==='failed'){
 html+='<div class="detail-section"><div style="padding:16px;background:#fee2e2;border-radius:8px"><div style="font-size:14px;font-weight:600;color:#991b1b;margin-bottom:8px">Analysis Failed</div>';
 if(analysis.error_text)html+='<div style="font-size:13px;color:#991b1b;margin-bottom:12px">'+escapeHtml(analysis.error_text)+'</div>';
-html+='<button class="btn" onclick="retryAnalysis(\''+fb.id+'\')">Retry Analysis</button></div></div>';
+				html+='<button class="btn" onclick="retryAnalysis(\\''+fb.id+'\\')"Retry Analysis</button></div></div>';
 }
 if(analysis&&analysis.signals_json){
 const signals=JSON.parse(analysis.signals_json);
@@ -498,8 +502,8 @@ setInterval(loadQueue,10000);
 				if (!env.DB) {
 					return json({ ok: false, error: 'Database not configured' }, { status: 500 });
 				}
-				const { insertFeedback } = await import('./db');
-				
+				const { insertFeedback, upsertAnalysis } = await import('./db');
+
 				const seedData = [
 					// Critical P0 issues
 					{ source: 'support', content: 'Complete outage - cannot access dashboard at all. Getting 503 errors for the past 30 minutes. This is blocking our entire team from working. URGENT!', priority: 'critical' },
@@ -509,7 +513,7 @@ setInterval(loadQueue,10000);
 					{ source: 'github', content: 'Database connection pool exhausted. All API requests timing out after 30 seconds. Production is effectively down.', priority: 'critical' },
 					{ source: 'x', content: '@yourapp URGENT: Our entire company is locked out. SSO authentication failing with "invalid token" error. 200+ users affected.', priority: 'critical' },
 					{ source: 'support', content: 'Data loss incident - uploaded files from the past 2 hours are missing. Need immediate investigation and recovery.', priority: 'critical' },
-					
+
 					// High priority issues
 					{ source: 'github', content: 'API returning 500 errors on /api/users endpoint. Started happening after the 2.1.0 deploy. Affecting production traffic.', priority: 'high' },
 					{ source: 'support', content: 'Data export feature timing out for datasets over 10k rows. Need this working ASAP for compliance reporting due next week.', priority: 'high' },
@@ -521,7 +525,7 @@ setInterval(loadQueue,10000);
 					{ source: 'x', content: '@yourapp the password reset emails are not being delivered. Tried 5 times over the past hour. Check your email service!', priority: 'high' },
 					{ source: 'github', content: 'Rate limiting too aggressive after recent update. Legitimate API calls getting 429 errors. Breaking customer integrations.', priority: 'high' },
 					{ source: 'support', content: 'Reports generation taking 10+ minutes when it used to take seconds. Database query performance degraded significantly.', priority: 'high' },
-					
+
 					// Medium priority issues
 					{ source: 'support', content: 'Cannot delete old projects. Delete button does nothing when clicked. Tried on Chrome and Firefox, same issue.', priority: 'medium' },
 					{ source: 'github', content: 'Dark mode toggle not persisting after page refresh. Have to re-enable it every time I visit the site.', priority: 'medium' },
@@ -536,7 +540,7 @@ setInterval(loadQueue,10000);
 					{ source: 'support', content: 'Timezone display incorrect for users in Asia/Pacific region. Shows UTC instead of local time.', priority: 'medium' },
 					{ source: 'x', content: 'Why does the app request camera permissions? I just want to upload existing photos, not take new ones.', priority: 'medium' },
 					{ source: 'github', content: 'API response times increased by 200ms on average after the CDN change. Not critical but noticeable.', priority: 'medium' },
-					
+
 					// Low priority / feature requests
 					{ source: 'github', content: 'Feature request: Add keyboard shortcuts for common actions. Would really speed up my workflow.', priority: 'low' },
 					{ source: 'support', content: 'Would be nice to have a CSV import option instead of just JSON. Not urgent but would be convenient.', priority: 'low' },
@@ -559,7 +563,7 @@ setInterval(loadQueue,10000);
 					{ source: 'x', content: 'Love the product! One small thing: can you add emoji reactions to comments? Would make communication more fun 😊', priority: 'low' },
 					{ source: 'github', content: 'Nice to have: Add a "compact view" option for the list to show more items on screen at once.', priority: 'low' },
 				];
-				
+
 				const inserted = [];
 				for (let i = 0; i < seedData.length; i++) {
 					const item = seedData[i];
@@ -570,9 +574,33 @@ setInterval(loadQueue,10000);
 						content: item.content,
 						metadata_json: JSON.stringify({ priority_hint: item.priority }),
 					});
+
+					// Create synthetic analysis result so items appear in queue
+					const analysisId = `analysis-${id}`;
+					const priorityMap: Record<string, number> = { 'critical': 5, 'high': 4, 'medium': 3, 'low': 2, 'minimal': 1 };
+					const pVal = priorityMap[item.priority] || 1;
+					const status = ['pending', 'assigned', 'done'][Math.floor(Math.random() * 3)];
+
+					await upsertAnalysis(env.DB, {
+						id: analysisId,
+						feedback_id: id,
+						status: status,
+						priority: pVal,
+						score: pVal * 20 - Math.floor(Math.random() * 10),
+						signals_json: JSON.stringify({
+							sentiment: 'negative',
+							severity_signal: pVal,
+							business_risk_signal: pVal,
+							confidence: 0.9,
+							explanation: 'Automated seed analysis',
+							keywords: ['seed', item.priority]
+						}),
+						result_json: JSON.stringify({ score: pVal * 20, priority: pVal })
+					});
+
 					inserted.push({ id, source: item.source });
 				}
-				
+
 				return json({ ok: true, inserted: inserted.length, items: inserted });
 			} catch (error) {
 				return json(
@@ -646,38 +674,38 @@ setInterval(loadQueue,10000);
 			const params = match('/analyze/:id', url.pathname);
 			if (params) {
 				if (method !== 'POST') return methodNotAllowed();
-				
+
 				const feedbackId = params.id;
-				
+
 				try {
 					const { analyzeFeedback } = await import('./ai');
 					const { computeScoreAndPriority } = await import('./scoring');
 					const { getItemDetail, upsertAnalysis } = await import('./db');
-					
+
 					if (!env.DB) {
 						return json({ ok: false, error: 'Database binding not configured' }, { status: 500 });
 					}
-					
+
 					if (!env.AI) {
 						return json({ ok: false, error: 'AI binding not configured' }, { status: 500 });
 					}
-					
+
 					const itemDetail = await getItemDetail(env.DB, feedbackId);
 					if (!itemDetail) {
 						return json({ ok: false, error: 'Feedback not found' }, { status: 404 });
 					}
-					
+
 					const analysisId = `analysis-${feedbackId}-${Date.now()}`;
-					
+
 					await upsertAnalysis(env.DB, {
 						id: analysisId,
 						feedback_id: feedbackId,
 						status: 'running',
 						priority: 0,
 					});
-					
+
 					const aiResult = await analyzeFeedback(env.AI, itemDetail.feedback.content);
-					
+
 					if (!aiResult.success) {
 						await upsertAnalysis(env.DB, {
 							id: analysisId,
@@ -687,7 +715,7 @@ setInterval(loadQueue,10000);
 							error_text: aiResult.error,
 							completed_at: new Date().toISOString(),
 						});
-						
+
 						return json(
 							{
 								ok: false,
@@ -698,9 +726,9 @@ setInterval(loadQueue,10000);
 							{ status: 500 },
 						);
 					}
-					
+
 					const scoringResult = computeScoreAndPriority(aiResult.signals);
-					
+
 					await upsertAnalysis(env.DB, {
 						id: analysisId,
 						feedback_id: feedbackId,
@@ -711,7 +739,7 @@ setInterval(loadQueue,10000);
 						result_json: JSON.stringify(scoringResult),
 						completed_at: new Date().toISOString(),
 					});
-					
+
 					return json(
 						{
 							ok: true,
