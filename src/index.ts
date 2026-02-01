@@ -11,13 +11,11 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-import type { ExportedHandler } from '@cloudflare/workers-types';
-
 // Export Workflow class for Cloudflare Workers runtime
 export { AnalyzeFeedbackWorkflow } from './workflow';
 
 export default {
-	async fetch(request, env, ctx): Promise<Response> {
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const url = new URL(request.url);
 		const method = request.method.toUpperCase();
 
@@ -593,7 +591,7 @@ setInterval(loadQueue,10000);
 					id: feedbackId,
 					source: payload.source || 'api',
 					content: payload.content,
-					metadata_json: payload.metadata ? JSON.stringify(payload.metadata) : null,
+					metadata_json: payload.metadata ? JSON.stringify(payload.metadata) : undefined,
 				});
 
 				// Create analysis record with 'running' status
