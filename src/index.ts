@@ -94,6 +94,10 @@ tr.selected{background:#eff6ff}
 .priority-2{background:#e0e7ff;color:#3730a3}
 .priority-1{background:#f3f4f6;color:#6b7280}
 .source-badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:11px;background:#f3f4f6;color:#4b5563}
+.status-badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;text-transform:uppercase}
+.status-pending{background:#fef3c7;color:#92400e}
+.status-assigned{background:#dbeafe;color:#1e40af}
+.status-done{background:#d1fae5;color:#065f46}
 .score{font-weight:600;color:#059669}
 .empty{text-align:center;padding:40px;color:#9ca3af}
 .detail-section{margin-bottom:24px}
@@ -118,16 +122,86 @@ tr.selected{background:#eff6ff}
 .override-item .action{font-weight:600;color:#111827}
 .loading{text-align:center;padding:20px;color:#9ca3af}
 .error{padding:12px;background:#fef2f2;color:#991b1b;border-radius:6px;margin-bottom:12px;font-size:13px}
+.filters{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.filters select{padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;background:#fff;cursor:pointer}
+.filters select:focus{outline:none;border-color:#3b82f6}
+.btn-secondary{padding:6px 12px;background:#fff;color:#111827;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer}
+.btn-secondary:hover{background:#f9fafb;border-color:#9ca3af}
+.scoring-info{background:#eff6ff;border:1px solid #3b82f6;border-radius:8px;padding:16px;margin-bottom:16px}
+.scoring-info h3{font-size:16px;font-weight:600;margin-bottom:8px;color:#1e40af}
+.scoring-info p{font-size:14px;color:#1e40af;margin-bottom:12px}
+.scoring-info ul{margin:12px 0;padding-left:20px}
+.scoring-info li{font-size:13px;color:#1e40af;margin-bottom:6px}
+.scoring-formula{background:#dbeafe;padding:10px;border-radius:6px;margin:10px 0;font-size:13px;color:#1e3a8a;font-family:ui-monospace,monospace}
 </style>
 </head>
 <body>
 <div class="container">
 <div class="left">
-<div class="header"><h1>Queue</h1></div>
+<div class="header">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<h1>Queue</h1>
+<button class="btn-secondary" onclick="toggleScoringInfo()">ℹ️ Scoring Info</button>
+</div>
+<div class="filters">
+<select id="priorityFilter" onchange="applyFilters()">
+<option value="">All Priorities</option>
+<option value="5">Critical (5)</option>
+<option value="4">High (4)</option>
+<option value="3">Medium (3)</option>
+<option value="2">Low (2)</option>
+<option value="1">Minimal (1)</option>
+</select>
+<select id="sourceFilter" onchange="applyFilters()">
+<option value="">All Sources</option>
+<option value="support">Support</option>
+<option value="github">GitHub</option>
+<option value="x">X (Twitter)</option>
+</select>
+<select id="statusFilter" onchange="applyFilters()">
+<option value="pending,assigned">Active (Pending + Assigned)</option>
+<option value="">All Statuses</option>
+<option value="pending">Pending Only</option>
+<option value="assigned">Assigned Only</option>
+<option value="done">Done Only</option>
+</select>
+<select id="sortBy" onchange="applyFilters()">
+<option value="time">Newest</option>
+<option value="time_asc">Oldest</option>
+<option value="score,time">Score</option>
+</select>
+<button class="btn-secondary" onclick="clearFilters()">Clear</button>
+</div>
+</div>
 <div class="content">
+<div id="scoringInfo" class="scoring-info" style="display:none">
+<h3>How Scoring Works</h3>
+<p>Each feedback item is analyzed by AI and assigned a score (0-100) and priority (1-5) based on:</p>
+<div class="scoring-formula">
+<strong>Score Formula:</strong><br>
+Base = (Severity × 20) + (Business Risk × 15) + Sentiment Weight<br>
+Final Score = Base × Confidence (0.0-1.0)
+</div>
+<ul>
+<li><strong>Severity Signal (1-5):</strong> How serious is the issue? Weight: ×20</li>
+<li><strong>Business Risk (1-5):</strong> Impact on business operations. Weight: ×15</li>
+<li><strong>Sentiment:</strong> Negative=+15, Neutral=+5, Positive=+0</li>
+<li><strong>Confidence (0.0-1.0):</strong> AI's certainty in the analysis</li>
+</ul>
+<div class="scoring-formula">
+<strong>Priority Tiers:</strong><br>
+Score ≥70 → Priority 5 (Critical)<br>
+Score ≥50 → Priority 4 (High)<br>
+Score ≥30 → Priority 3 (Medium)<br>
+Score ≥15 → Priority 2 (Low)<br>
+Score <15 → Priority 1 (Minimal)
+</div>
+<p style="margin-top:12px;font-size:13px"><strong>Status & Queue Ordering:</strong> Items are sorted by status first, then priority, then time. Pending items appear at the top (most urgent), followed by Assigned, then Done items at the bottom. The default view shows only Active items (Pending + Assigned) to focus on actionable work.</p>
+<button class="btn-secondary" onclick="toggleScoringInfo()">Close</button>
+</div>
 <table id="queueTable">
-<thead><tr><th>Priority</th><th>Feedback</th><th>Source</th><th>Score</th></tr></thead>
-<tbody id="queueBody"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody>
+<thead><tr><th>Priority</th><th>Feedback</th><th>Source</th><th>Status</th><th>Score</th></tr></thead>
+<tbody id="queueBody"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody>
 </table>
 </div>
 </div>
@@ -141,10 +215,38 @@ tr.selected{background:#eff6ff}
 <script>
 let selectedId=null;
 function escapeHtml(str){const div=document.createElement('div');div.textContent=str;return div.innerHTML}
+function toggleScoringInfo(){
+const info=document.getElementById('scoringInfo');
+info.style.display=info.style.display==='none'?'block':'none';
+}
+function applyFilters(){
+loadQueue();
+}
+function clearFilters(){
+document.getElementById('priorityFilter').value='';
+document.getElementById('sourceFilter').value='';
+document.getElementById('statusFilter').value='';
+document.getElementById('sortBy').value='time';
+loadQueue();
+}
 async function loadQueue(){
 const tbody=document.getElementById('queueBody');
 try{
-const res=await fetch('/queue');
+const priority=document.getElementById('priorityFilter').value;
+const source=document.getElementById('sourceFilter').value;
+const status=document.getElementById('statusFilter').value;
+const sortBy=document.getElementById('sortBy').value;
+const params=new URLSearchParams();
+if(priority)params.append('priority',priority);
+if(source)params.append('source',source);
+if(status){
+const statuses=status.split(',');
+statuses.forEach(s=>params.append('status',s.trim()));
+}
+if(sortBy)params.append('sort',sortBy);
+const queryString=params.toString();
+const url='/queue'+(queryString?'?'+queryString:'');
+const res=await fetch(url);
 const data=await res.json();
 if(!data.ok||!data.items||data.items.length===0){
 tbody.innerHTML='<tr><td colspan="4" class="empty">No items in queue</td></tr>';
@@ -152,18 +254,24 @@ return;
 }
 const rows=data.items.map(item=>{
 const priorityClass='priority-'+(item.priority||1);
-const priorityLabel=['','minimal','low','medium','high','critical'][item.priority||1]||'unknown';
+const labels={1:'minimal',2:'low',3:'medium',4:'high',5:'critical'};
+const priorityLabel=labels[item.priority]||'unknown';
 const selected=selectedId===item.feedback_id?'selected':'';
 const content=(item.content||'').substring(0,60);
 const contentPreview=escapeHtml(content)+(item.content&&item.content.length>60?'...':'');
 const sourceBadge=item.source?'<span class="source-badge">'+escapeHtml(item.source)+'</span>':'-';
+const statusClass='status-'+item.status;
+const statusBadge='<span class="status-badge '+statusClass+'">'+item.status+'</span>';
 const score=item.score||'-';
-return '<tr onclick="selectItem('+JSON.stringify(item.feedback_id)+')" class="'+selected+'"><td><span class="priority-chip '+priorityClass+'">'+priorityLabel+'</span></td><td>'+contentPreview+'</td><td>'+sourceBadge+'</td><td class="score">'+score+'</td></tr>';
+return '<tr data-id="'+escapeHtml(item.feedback_id)+'" class="queue-row '+selected+'"><td><span class="priority-chip '+priorityClass+'">'+priorityLabel+'</span></td><td>'+contentPreview+'</td><td>'+sourceBadge+'</td><td>'+statusBadge+'</td><td class="score">'+score+'</td></tr>';
 });
 tbody.innerHTML=rows.join('');
+document.querySelectorAll('.queue-row').forEach(row=>{
+row.onclick=()=>selectItem(row.getAttribute('data-id'));
+});
 }catch(e){
 console.error('Queue load error:',e);
-tbody.innerHTML='<tr><td colspan="4" class="error">Failed to load queue: '+e.message+'</td></tr>';
+tbody.innerHTML='<tr><td colspan="5" class="error">Failed to load queue: '+e.message+'</td></tr>';
 }
 }
 async function selectItem(id){
@@ -198,21 +306,59 @@ html+='<div class="detail-section"><h2>Keywords</h2><div class="keywords">'+sign
 }
 }
 if(analysis){
-html+='<div class="detail-section"><h2>Override Priority</h2><form id="overrideForm" onsubmit="submitOverride(event,'+JSON.stringify(analysis.id)+')"><div class="form-group"><label>New Priority (1-5)</label><input type="number" id="newPriority" min="1" max="5" required></div><div class="form-group"><label>Reason</label><textarea id="overrideReason" rows="2" required></textarea></div><button type="submit" class="btn">Submit Override</button></form></div>';
+html+='<div class="detail-section"><h2>Change Status</h2><form id="statusForm" data-analysis-id="'+escapeHtml(analysis.id)+'"><div class="form-group"><label>Status</label><select id="newStatus" required><option value="pending">Pending</option><option value="assigned">Assigned</option><option value="done">Done</option></select></div><button type="submit" class="btn">Update Status</button></form></div>';
+html+='<div class="detail-section"><h2>Override Priority</h2><form id="overrideForm" data-analysis-id="'+escapeHtml(analysis.id)+'"><div class="form-group"><label>New Priority (1-5)</label><input type="number" id="newPriority" min="1" max="5" required></div><div class="form-group"><label>Reason</label><textarea id="overrideReason" rows="2" required></textarea></div><button type="submit" class="btn">Submit Override</button></form></div>';
 }
 if(overrides.length>0){
 html+='<div class="detail-section"><h2>Override History</h2><div class="override-list">'+overrides.map(o=>'<div class="override-item"><div class="meta">'+(o.created_at||'')+(o.actor?' by '+escapeHtml(o.actor):'')+'</div><div class="action">'+escapeHtml(o.action||'')+'</div>'+(o.payload_json?'<div>'+escapeHtml(o.payload_json)+'</div>':'')+'</div>').join('')+'</div></div>';
 }
 detail.innerHTML=html;
+const statusForm=document.getElementById('statusForm');
+if(statusForm){
+statusForm.onsubmit=(e)=>{
+e.preventDefault();
+const analysisId=statusForm.getAttribute('data-analysis-id');
+const newStatus=document.getElementById('newStatus').value;
+updateStatus(analysisId,newStatus);
+};
+}
+const form=document.getElementById('overrideForm');
+if(form){
+form.onsubmit=(e)=>{
+e.preventDefault();
+const analysisId=form.getAttribute('data-analysis-id');
+submitOverride(analysisId);
+};
+}
 }catch(e){
 detail.innerHTML='<div class="error">Failed to load item details</div>';
 }
 }
-async function submitOverride(e,analysisId){
-e.preventDefault();
+async function updateStatus(analysisId,newStatus){
+const form=document.getElementById('statusForm');
+const btn=form.querySelector('button');
+btn.disabled=true;
+btn.textContent='Updating...';
+try{
+const res=await fetch('/status/'+encodeURIComponent(analysisId),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({status:newStatus})});
+if(res.ok){
+await loadQueue();
+await selectItem(selectedId);
+}else{
+alert('Failed to update status');
+}
+}catch(e){
+alert('Error: '+e.message);
+}finally{
+btn.disabled=false;
+btn.textContent='Update Status';
+}
+}
+async function submitOverride(analysisId){
 const priority=parseInt(document.getElementById('newPriority').value);
 const reason=document.getElementById('overrideReason').value;
-const btn=e.target.querySelector('button');
+const form=document.getElementById('overrideForm');
+const btn=form.querySelector('button');
 btn.disabled=true;
 btn.textContent='Submitting...';
 try{
@@ -246,7 +392,16 @@ setInterval(loadQueue,10000);
 					return json({ ok: true, items: [] });
 				}
 				const { listQueue } = await import('./db');
-				const items = await listQueue(env.DB, { limit: 100 });
+				const priority = url.searchParams.get('priority');
+				const source = url.searchParams.get('source');
+				const statuses = url.searchParams.getAll('status');
+				const sort = url.searchParams.get('sort');
+				const filters: { limit: number; priority?: number; source?: string; status?: string; statuses?: string[]; sort?: string } = { limit: 100 };
+				if (priority) filters.priority = parseInt(priority);
+				if (source) filters.source = source;
+				if (statuses.length > 0) filters.statuses = statuses;
+				if (sort) filters.sort = sort;
+				const items = await listQueue(env.DB, filters);
 				const enrichedItems = await Promise.all(
 					items.map(async (item) => {
 						const feedbackResult = await env.DB
@@ -301,17 +456,43 @@ setInterval(loadQueue,10000);
 				const { insertFeedback } = await import('./db');
 				
 				const seedData = [
+					// Critical P0 issues
 					{ source: 'support', content: 'Complete outage - cannot access dashboard at all. Getting 503 errors for the past 30 minutes. This is blocking our entire team from working. URGENT!', priority: 'critical' },
 					{ source: 'support', content: 'Login broken after password reset. Tried multiple times, keeps saying invalid credentials even with the new password. Cannot access my account.', priority: 'critical' },
 					{ source: 'support', content: 'Billing issue - charged twice this month. Invoice #4521 and #4522 both processed for the same subscription period. Need immediate refund.', priority: 'critical' },
+					{ source: 'support', content: 'Payment processing completely down. Customers cannot complete purchases. Losing revenue every minute this is broken!', priority: 'critical' },
+					{ source: 'github', content: 'Database connection pool exhausted. All API requests timing out after 30 seconds. Production is effectively down.', priority: 'critical' },
+					{ source: 'x', content: '@yourapp URGENT: Our entire company is locked out. SSO authentication failing with "invalid token" error. 200+ users affected.', priority: 'critical' },
+					{ source: 'support', content: 'Data loss incident - uploaded files from the past 2 hours are missing. Need immediate investigation and recovery.', priority: 'critical' },
+					
+					// High priority issues
 					{ source: 'github', content: 'API returning 500 errors on /api/users endpoint. Started happening after the 2.1.0 deploy. Affecting production traffic.', priority: 'high' },
 					{ source: 'support', content: 'Data export feature timing out for datasets over 10k rows. Need this working ASAP for compliance reporting due next week.', priority: 'high' },
 					{ source: 'x', content: '@yourapp why is the mobile app crashing every time I try to upload an image? iPhone 14, iOS 17. Literally unusable right now.', priority: 'high' },
 					{ source: 'github', content: 'Memory leak in the background sync worker. Server RAM usage grows unbounded over 24-48 hours until restart required.', priority: 'high' },
+					{ source: 'support', content: 'Webhook deliveries failing intermittently. About 30% of webhooks are not being sent. Critical for our integrations.', priority: 'high' },
+					{ source: 'github', content: 'Search indexing broken after Elasticsearch upgrade. New content not appearing in search results for 2+ hours.', priority: 'high' },
+					{ source: 'support', content: 'File uploads over 50MB failing with cryptic error. This worked fine last week. Multiple customers reporting same issue.', priority: 'high' },
+					{ source: 'x', content: '@yourapp the password reset emails are not being delivered. Tried 5 times over the past hour. Check your email service!', priority: 'high' },
+					{ source: 'github', content: 'Rate limiting too aggressive after recent update. Legitimate API calls getting 429 errors. Breaking customer integrations.', priority: 'high' },
+					{ source: 'support', content: 'Reports generation taking 10+ minutes when it used to take seconds. Database query performance degraded significantly.', priority: 'high' },
+					
+					// Medium priority issues
 					{ source: 'support', content: 'Cannot delete old projects. Delete button does nothing when clicked. Tried on Chrome and Firefox, same issue.', priority: 'medium' },
 					{ source: 'github', content: 'Dark mode toggle not persisting after page refresh. Have to re-enable it every time I visit the site.', priority: 'medium' },
 					{ source: 'x', content: 'Love the new dashboard redesign but the search is noticeably slower now. Takes 3-4 seconds vs instant before.', priority: 'medium' },
 					{ source: 'support', content: 'Email notifications are delayed by 15-20 minutes. Not critical but makes real-time collaboration difficult.', priority: 'medium' },
+					{ source: 'github', content: 'Pagination broken on the activity feed. Clicking "next page" shows duplicate items from previous page.', priority: 'medium' },
+					{ source: 'support', content: 'Profile picture upload not working on Safari. Works fine on Chrome. Getting "unsupported format" error for valid JPEGs.', priority: 'medium' },
+					{ source: 'x', content: 'The mobile app keeps logging me out every few hours. Super annoying to have to re-authenticate constantly.', priority: 'medium' },
+					{ source: 'github', content: 'Markdown rendering broken for code blocks with certain languages. Python and Ruby display fine but Go and Rust are broken.', priority: 'medium' },
+					{ source: 'support', content: 'Team invitation emails sometimes go to spam. Can you add SPF/DKIM records to improve deliverability?', priority: 'medium' },
+					{ source: 'github', content: 'Drag and drop file upload not working on Firefox. Have to use the file picker dialog instead.', priority: 'medium' },
+					{ source: 'support', content: 'Timezone display incorrect for users in Asia/Pacific region. Shows UTC instead of local time.', priority: 'medium' },
+					{ source: 'x', content: 'Why does the app request camera permissions? I just want to upload existing photos, not take new ones.', priority: 'medium' },
+					{ source: 'github', content: 'API response times increased by 200ms on average after the CDN change. Not critical but noticeable.', priority: 'medium' },
+					
+					// Low priority / feature requests
 					{ source: 'github', content: 'Feature request: Add keyboard shortcuts for common actions. Would really speed up my workflow.', priority: 'low' },
 					{ source: 'support', content: 'Would be nice to have a CSV import option instead of just JSON. Not urgent but would be convenient.', priority: 'low' },
 					{ source: 'x', content: 'Any plans to add a calendar view? Current list view is fine but calendar would be helpful for planning.', priority: 'low' },
@@ -321,6 +502,17 @@ setInterval(loadQueue,10000);
 					{ source: 'github', content: 'Feature idea: bulk actions for managing multiple items at once. Would save a lot of clicking.', priority: 'low' },
 					{ source: 'support', content: 'Is there a way to customize the dashboard widgets? Would love to rearrange them to fit my workflow.', priority: 'low' },
 					{ source: 'github', content: 'Small typo in the settings page: "Prefences" should be "Preferences". Just noticed it today.', priority: 'low' },
+					{ source: 'support', content: 'Feature request: Add a "recently viewed" section to quickly access items I was working on.', priority: 'low' },
+					{ source: 'x', content: 'Would be cool to have animated transitions between pages. Current navigation feels a bit abrupt.', priority: 'low' },
+					{ source: 'github', content: 'Request: Add syntax highlighting for YAML files in the code editor. Currently only supports JSON.', priority: 'low' },
+					{ source: 'support', content: 'Can you add a print-friendly view for reports? Current layout breaks across pages awkwardly.', priority: 'low' },
+					{ source: 'github', content: 'Enhancement: Show relative timestamps (e.g., "2 hours ago") in addition to absolute dates.', priority: 'low' },
+					{ source: 'x', content: 'The loading spinner is cute but maybe add a progress bar for long operations so we know how long to wait?', priority: 'low' },
+					{ source: 'support', content: 'Minor suggestion: Add a confirmation dialog when deleting items. I accidentally deleted something yesterday.', priority: 'low' },
+					{ source: 'github', content: 'Feature: Export data in multiple formats (CSV, JSON, XML). Currently only supports JSON.', priority: 'low' },
+					{ source: 'support', content: 'The help documentation is great but could use a search function to find topics more easily.', priority: 'low' },
+					{ source: 'x', content: 'Love the product! One small thing: can you add emoji reactions to comments? Would make communication more fun 😊', priority: 'low' },
+					{ source: 'github', content: 'Nice to have: Add a "compact view" option for the list to show more items on screen at once.', priority: 'low' },
 				];
 				
 				const inserted = [];
@@ -413,7 +605,7 @@ setInterval(loadQueue,10000);
 					await upsertAnalysis(env.DB, {
 						id: analysisId,
 						feedback_id: feedbackId,
-						status: 'done',
+						status: 'pending',
 						priority: scoringResult.priority,
 						score: scoringResult.score,
 						signals_json: JSON.stringify(aiResult.signals),
@@ -438,6 +630,31 @@ setInterval(loadQueue,10000);
 							error: 'Internal server error',
 							details: error instanceof Error ? error.message : String(error),
 						},
+						{ status: 500 },
+					);
+				}
+			}
+		}
+
+		{
+			const params = match('/status/:id', url.pathname);
+			if (params) {
+				if (method !== 'POST') return methodNotAllowed();
+				try {
+					if (!env.DB) {
+						return json({ ok: false, error: 'Database not configured' }, { status: 500 });
+					}
+					const payload = await readJson<{ status?: string }>();
+					if (!payload || !payload.status) {
+						return json({ ok: false, error: 'Invalid payload: status required' }, { status: 400 });
+					}
+					const analysisId = params.id;
+					const { updateAnalysisStatus } = await import('./db');
+					await updateAnalysisStatus(env.DB, analysisId, payload.status);
+					return json({ ok: true, analysis_id: analysisId, status: payload.status });
+				} catch (error) {
+					return json(
+						{ ok: false, error: 'Failed to update status', details: error instanceof Error ? error.message : String(error) },
 						{ status: 500 },
 					);
 				}

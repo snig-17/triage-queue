@@ -32,9 +32,12 @@ export interface Override {
 }
 
 export interface QueueFilters {
+	priority?: number;
 	status?: string;
+	statuses?: string[];
 	source?: string;
 	search?: string;
+	sort?: string;
 	limit?: number;
 	offset?: number;
 }
@@ -112,7 +115,16 @@ export async function listQueue(db: D1Database, filters: QueueFilters = {}): Pro
 	const bindings: unknown[] = [];
 	let bindIndex = 1;
 
-	if (filters.status) {
+	if (filters.priority !== undefined) {
+		conditions.push(`a.priority = ?${bindIndex++}`);
+		bindings.push(filters.priority);
+	}
+
+	if (filters.statuses && filters.statuses.length > 0) {
+		const placeholders = filters.statuses.map(() => `?${bindIndex++}`).join(',');
+		conditions.push(`a.status IN (${placeholders})`);
+		filters.statuses.forEach(s => bindings.push(s));
+	} else if (filters.status) {
 		conditions.push(`a.status = ?${bindIndex++}`);
 		bindings.push(filters.status);
 	}
@@ -132,12 +144,33 @@ export async function listQueue(db: D1Database, filters: QueueFilters = {}): Pro
 	const limit = filters.limit ?? 100;
 	const offset = filters.offset ?? 0;
 
+	// Build ORDER BY clause based on sort parameter
+	let orderBy = 'status_order ASC, a.priority DESC, a.queued_at ASC'; // default
+	if (filters.sort) {
+		const sortParts = filters.sort.split(',');
+		const orderParts: string[] = [];
+		for (const part of sortParts) {
+			if (part === 'status') orderParts.push('status_order ASC');
+			else if (part === 'priority') orderParts.push('a.priority DESC');
+			else if (part === 'score') orderParts.push('a.score DESC');
+			else if (part === 'time') orderParts.push('a.queued_at DESC');
+			else if (part === 'time_asc') orderParts.push('a.queued_at ASC');
+		}
+		if (orderParts.length > 0) orderBy = orderParts.join(', ');
+	}
+
 	const sql = `
-    SELECT a.*
+    SELECT a.*,
+    CASE 
+      WHEN a.status = 'pending' THEN 1
+      WHEN a.status = 'assigned' THEN 2
+      WHEN a.status = 'done' THEN 3
+      ELSE 4
+    END as status_order
     FROM analysis a
     INNER JOIN feedback f ON a.feedback_id = f.id
     ${whereClause}
-    ORDER BY a.status, a.priority DESC, a.queued_at ASC
+    ORDER BY ${orderBy}
     LIMIT ?${bindIndex++} OFFSET ?${bindIndex++}
   `;
 
@@ -169,13 +202,10 @@ export async function getItemDetail(db: D1Database, feedbackId: string): Promise
 
 	if (analysisIds.length > 0) {
 		const placeholders = analysisIds.map((_, i) => `?${i + 1}`).join(',');
-		const overridesStmt = db.prepare(
-			`SELECT * FROM overrides WHERE analysis_id IN (${placeholders}) ORDER BY created_at DESC`,
-		);
-		for (const aid of analysisIds) {
-			overridesStmt.bind(aid);
-		}
-		const overridesResult = await overridesStmt.all<Override>();
+		const overridesResult = await db
+			.prepare(`SELECT * FROM overrides WHERE analysis_id IN (${placeholders}) ORDER BY created_at DESC`)
+			.bind(...analysisIds)
+			.all<Override>();
 		overridesRecords = overridesResult.results ?? [];
 	}
 
@@ -184,6 +214,13 @@ export async function getItemDetail(db: D1Database, feedbackId: string): Promise
 		analysis: analysisRecords,
 		overrides: overridesRecords,
 	};
+}
+
+export async function updateAnalysisStatus(db: D1Database, analysisId: string, status: string): Promise<void> {
+	await db
+		.prepare(`UPDATE analysis SET status = ?1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?2`)
+		.bind(status, analysisId)
+		.run();
 }
 
 export async function insertOverride(
